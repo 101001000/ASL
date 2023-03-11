@@ -1,2 +1,8 @@
 src/_build
 vellvm/
+*.vo
+*.vok
+*.vos
+*.mli
+*.glob
+*.aux
