@@ -1,5 +1,11 @@
+(env
+  (dev
+    (flags (:standard -w -34 -w -33) )))
+
 (executable
- (name main))
+ (name main)
+ (libraries libvellvm)
+ )
 
 (menhir
  (modules parser))
