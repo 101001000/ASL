@@ -6,3 +6,8 @@ vellvm/
 *.mli
 *.glob
 *.aux
+*.crashcoqide
+*.out
+*.ll
+Compiler.ml
+Ast.ml
