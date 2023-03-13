@@ -1,15 +1,13 @@
 From Coq Require Import
-  Strings.String.
+  Strings.String ZArith.
 
 Local Open Scope string_scope.
 
 Definition var : Set := string.
 
-Definition value : Type := nat.
-
 Inductive expr : Type :=
 | Var (_ : var)
-| Lit (_ : value).
+| Lit (_ : Z).
 
 Inductive stmt : Type :=
 | Assign (x : var) (e : expr)    
