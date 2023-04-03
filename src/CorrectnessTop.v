@@ -1,5 +1,5 @@
 From ASL Require Import
-  Ast Denotation CompilerCFG CorrectnessCFG.
+  Ast Denotation CompilerCFG CorrectnessCFG AslFacts.
 
 From Vellvm Require Import
   Semantics Syntax TopLevel Theory Utils.PropT. 
@@ -35,19 +35,9 @@ Definition bisimilar (t1 : itree (ImpState +' CallE +' PickE +' UBE +' DebugE +'
 Definition TT {A B}: A -> B -> Prop  := fun _ _ => True.
   Hint Unfold TT: core.
 
-Lemma interp_asl_ret : forall (g:env) (E:Type->Type) x, interp_asl (E:=E) (A:=unit) (Ret x) g ≈ Ret (g, x).
-Proof.
-  intros; unfold ℑ3.
-  unfold interp_asl.
-  rewrite unfold_interp. simpl.
-  unfold MapDefault.interp_map. cbn.
-  rewrite interp_state_ret .
-  reflexivity.
-Qed.
-
 
 Theorem compiler_correct (s:stmt) :
-  bisimilar (denote_imp s) (denote_cfg (compile_cfg s)).
+  bisimilar (denote_asl s) (denote_cfg (compile_cfg s)).
 Proof.
   unfold bisimilar.
   intros.
