@@ -3,4 +3,6 @@
 -I ../vellvm/lib/QuickChick/plugin
 -R ../vellvm/lib/QuickChick/src QuickChick
 -R ../vellvm/lib/flocq-quickchick FlocqQuickChick
--R ./ASL/ ASL
+-R ./ASL ASL
+-R ./Compiler ASLCompiler
+-R ./LLVM LLVMExtra
