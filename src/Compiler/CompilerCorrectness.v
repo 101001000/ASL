@@ -1,8 +1,9 @@
-From Coq         Require Import String.
+From Coq         Require Import String ZArith.
 From ASL         Require Import Semantics AST Theory.
 From ASLCompiler Require Import Compiler Renv.
 From Vellvm      Require Import Semantics. 
 From ITree       Require Import ITree ITreeFacts. 
+From LLVMExtra   Require Import Utils.
 
 Import SemNotations.
 
@@ -27,13 +28,28 @@ Theorem compiler_correct (s:stmt) :
 Proof.
   unfold bisimilar.
   intros.
+  unfold denote_cfg; simpl.
+  rewrite simpl_block.
+  rewrite bind_bind.
+  setoid_rewrite bind_ret_. 
+  unfold denote_asl; simpl.
   induction s.
   
   + (* Assign *) 
+    unfold compile; simpl.
+    unfold gen_alloc_instr; simpl.
+    (* Because our expressions can only be Lit, destruct will only throw one case *)
+    destruct e; simpl.
+    rewrite DenotationTheory.denote_code_cons.
+    rewrite bind_bind.
+    rewrite InterpreterCFG.interp_cfg3_bind.
+    rewrite simpl_alloc.
+    repeat rewrite bind_ret_.
+    simpl.
+    
+
     give_up.
   + (* Skip *)
-    unfold denote_cfg; simpl.
-    rewrite simpl_block.
     rewrite DenotationTheory.denote_code_nil.
     repeat rewrite bind_ret_.
     rewrite InterpreterCFG.interp_cfg3_ret.
