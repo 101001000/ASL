@@ -1,8 +1,8 @@
-From Coq    Require Import String.
+From Coq    Require Import String ZArith Morphisms.
 From Vellvm Require Import Semantics.DynamicValues.
-From ITree  Require Import ITree.
+From ITree  Require Import ITree ITreeFacts Events.MapDefault Events.StateFacts.
 From ASL    Require Import AST.
-From ExtLib Require Import Structures.Monad.
+From ExtLib Require Import Structures.Monad Data.Map.FMapAList Data.String.
 
 Import Monads.
 Import MonadNotation.
@@ -12,6 +12,9 @@ Local Open Scope monad_scope.
 
 Variant State : Type -> Type :=
 | SetVar (x : string) (v : int32) : State unit.
+
+(* We model the env state as a map of string-int32*)
+Definition env := alist string int32.
 
 Section Denote.
 
@@ -30,3 +33,53 @@ Section Denote.
     end.
 
 End Denote.
+
+Section Interpretation.
+
+  Definition handle_State {E: Type -> Type} `{mapE string (Int32.repr 0%Z) -< E}: State ~> itree E :=
+  fun _ e => match e with
+             | SetVar x v => insert x v
+             end.
+
+  Definition interp_asl  {E A} (t : itree (State +' E) A) : stateT env (itree E) A :=
+    let t' := interp (bimap handle_State (id_ E)) t in
+    interp_map t'.
+
+End Interpretation.
+
+Section InterpretationProperties.
+
+  Context {E': Type -> Type}.
+  Notation E := (State +' E').
+
+
+  (** This interpreter is compatible with the equivalence-up-to-tau. *)
+  Global Instance eutt_interp_imp {R}:
+    Proper (@eutt E R R eq ==> eq ==> @eutt E' (prod (env) R) (prod _ R) eq)
+           interp_asl.
+  Proof.
+    repeat intro.
+    unfold interp_asl.
+    unfold interp_map.
+    rewrite H0. eapply eutt_interp_state_eq; auto.
+    rewrite H. reflexivity.
+  Qed.
+
+  (** [interp_imp] commutes with [bind]. *)
+  Lemma interp_imp_bind: forall {R S} (t: itree E R) (k: R -> itree E S) (g : env),
+      (interp_asl (ITree.bind t k) g)
+    ≅ (ITree.bind (interp_asl t g) (fun '(g',  x) => interp_asl (k x) g')).
+  Proof.
+    intros.
+    unfold interp_asl.
+    unfold interp_map.
+    repeat rewrite interp_bind.
+    repeat rewrite interp_state_bind.
+    apply eqit_bind; [ reflexivity | ].
+    red. intros.
+    destruct a as [g'  x].
+    simpl.
+    reflexivity.
+  Qed.
+
+End InterpretationProperties.
