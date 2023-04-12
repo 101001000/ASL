@@ -1,0 +1,6 @@
+-R ../vellvm/src/coq Vellvm
+-I ../vellvm/lib/QuickChick/src
+-I ../vellvm/lib/QuickChick/plugin
+-R ../vellvm/lib/QuickChick/src QuickChick
+-R ../vellvm/lib/flocq-quickchick FlocqQuickChick
+-R ./ASL/ ASL
