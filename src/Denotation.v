@@ -23,15 +23,14 @@ From ITree Require Import
      ITreeFacts
      Events.MapDefault
      Events.StateFacts.
-
 Import Monads.
 Import MonadNotation.
 Local Open Scope monad_scope.
 Local Open Scope string_scope.
 
 Variant ImpState : Type -> Type :=
-| GetVar (x : var) : ImpState Z
-| SetVar (x : var) (v : Z) : ImpState unit.
+| GetVar (x : string) : ImpState Z
+| SetVar (x : string) (v : Z) : ImpState unit.
 
 (*ASL AS A REALLY SIMPLE SUBSET OF THE IMP LANGUAGE PROPOSED IN THE iTree REPO TUTORIAL*)
 
@@ -42,7 +41,6 @@ Section Denote.
 
   Fixpoint denote_expr (e : expr) : itree eff Z :=
     match e with
-    | Var v     => trigger (GetVar v)
     | Lit n     => ret n
     end.
 
@@ -68,7 +66,7 @@ Proof.
   - intros EQ; apply string_dec_sound in EQ; unfold rel_dec; simpl; rewrite EQ; reflexivity.
 Qed.
 
-Definition handle_ImpState {E: Type -> Type} `{mapE var 0%Z -< E}: ImpState ~> itree E :=
+Definition handle_ImpState {E: Type -> Type} `{mapE string 0%Z -< E}: ImpState ~> itree E :=
   fun _ e =>
     match e with
     | GetVar x => lookup_def x
@@ -76,7 +74,7 @@ Definition handle_ImpState {E: Type -> Type} `{mapE var 0%Z -< E}: ImpState ~> i
     end.
 
 
-Definition env := alist var Z.
+Definition env := alist string Z.
 
 Definition interp_asl  {E A} (t : itree (ImpState +' E) A) : stateT env (itree E) A :=
   let t' := interp (bimap handle_ImpState (id_ E)) t in

@@ -1,4 +1,5 @@
 -R ../vellvm/src/coq Vellvm
+-R tutorial/ ITreeTutorial
 -I ../vellvm/lib/QuickChick/src
 -I ../vellvm/lib/QuickChick/plugin
 -R ../vellvm/lib/QuickChick/src QuickChick
