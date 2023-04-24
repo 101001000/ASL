@@ -556,4 +556,40 @@ Proof.
     contradiction.
   - reflexivity.
 Qed.
+
+ 
+Lemma names_neq : forall x k,
+  x <> k -> Name x <> Name k.
+Proof.
+  intros.
+  unfold not.
+  intros H'.
+  inversion H'.
+  contradiction.
+Qed.
   
+
+
+Lemma read_fresh :
+  forall m v a, read m a (DTYPE_I 32) = inr (UVALUE_I32 v) -> fst a <> next_logical_key m.
+Proof.
+  intros.
+  intros Heq.
+
+  assert (forall m z, read m (next_logical_key m, z) (DTYPE_I 32) = inl "Attempting to read a non-allocated address"). {
+      intros.
+      unfold read. simpl.
+      destruct get_logical_block eqn:Eqlb.
+        + destruct l.
+          pose proof get_logical_block_next_logical_key_none; specialize H0 with (m:=m0). rewrite H0 in Eqlb. discriminate Eqlb.
+        + reflexivity.
+  }
+
+  specialize H0 with (m:=m).
+  destruct a eqn:HDa.
+  simpl in Heq.
+  subst z.
+  specialize H0 with (z:=z0).
+  rewrite H in H0.
+  discriminate.
+Qed.

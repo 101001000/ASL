@@ -28,31 +28,6 @@ forall k v, (alist_In k env_asl v <-> get_val g_llvm l_llvm m_llvm k = Some v)
 /\ (FMapAList.alist_find k env_asl = None <-> FMapAList.alist_find (Name k) l_llvm = None).
 
 
-Lemma read_fresh :
-  forall m v a, read m a (DTYPE_I 32) = inr (UVALUE_I32 v) -> fst a <> next_logical_key m.
-Proof.
-  intros.
-  intros Heq.
-
-  assert (forall m z, read m (next_logical_key m, z) (DTYPE_I 32) = inl "Attempting to read a non-allocated address"). {
-      intros.
-      unfold read. simpl.
-      destruct get_logical_block eqn:Eqlb.
-        + destruct l.
-          pose proof get_logical_block_next_logical_key_none; specialize H0 with (m:=m0). rewrite H0 in Eqlb. discriminate Eqlb.
-        + reflexivity.
-  }
-
-  specialize H0 with (m:=m).
-  destruct a eqn:HDa.
-  simpl in Heq.
-  subst z.
-  specialize H0 with (z:=z0).
-  rewrite H in H0.
-  discriminate.
-Qed.
-
-
 Lemma get_val_no_fresh_ptr : forall g l m x i z,
   get_val g l m x = Some i -> 
   FMapAList.alist_find (Name x) l <> Some (UVALUE_Addr (next_logical_key m, z)).
@@ -112,16 +87,6 @@ Proof.
   contradiction.
 Qed.
 
- 
-Lemma names_neq : forall x k,
-  x <> k -> Name x <> Name k.
-Proof.
-  intros.
-  unfold not.
-  intros H'.
-  inversion H'.
-  contradiction.
-Qed.
 
 Lemma get_val_mem_stack_add: forall g env l m k x i v,
   Renvh env g l m ->
@@ -227,7 +192,7 @@ Proof.
         unfold Renvh in H.
         apply H.
 
-        apply fin with (k:=k) (x:=x) (i:=i) (v:=v) in H0; auto.
+        apply get_val_mem_stack_add with (k:=k) (x:=x) (i:=i) (v:=v) in H0; auto.
         
   + split.
 
