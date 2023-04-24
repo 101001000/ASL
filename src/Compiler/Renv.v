@@ -123,12 +123,9 @@ Proof.
   contradiction.
 Qed.
 
-Lemma fin: forall g env l m k x i v,
-
-Renvh env g l m ->
-(get_val g l (mem_stack_add m x i) k = Some v) -> (get_val g l m k = Some v).
-
-
+Lemma get_val_mem_stack_add: forall g env l m k x i v,
+  Renvh env g l m ->
+  (get_val g l (mem_stack_add m x i) k = Some v) -> (get_val g l m k = Some v).
 Proof.
   unfold get_val.
   intros.
