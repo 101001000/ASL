@@ -29,6 +29,7 @@ Section Denote.
   Fixpoint denote_asl (s : stmt) : itree eff unit :=
     match s with
     | Assign x e =>  v <- denote_expr e ;; trigger (SetVar x v)
+    | Seq s1 s2 =>  denote_asl s1 ;; denote_asl s2
     | Skip => ret tt
     end.
 
@@ -51,7 +52,6 @@ Section InterpretationProperties.
 
   Context {E': Type -> Type}.
   Notation E := (State +' E').
-
 
   (** This interpreter is compatible with the equivalence-up-to-tau. *)
   Global Instance eutt_interp_imp {R}:
@@ -81,5 +81,7 @@ Section InterpretationProperties.
     simpl.
     reflexivity.
   Qed.
+
+
 
 End InterpretationProperties.
