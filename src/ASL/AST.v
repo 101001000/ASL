@@ -8,4 +8,5 @@ Inductive expr : Type :=
 
 Inductive stmt : Type :=
 | Assign (x : string) (e : expr)
+| Seq    (a b : stmt)
 | Skip.
