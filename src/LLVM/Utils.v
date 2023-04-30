@@ -37,6 +37,117 @@ match allocate m (DTYPE_I 32%N) with
   | inl _ => empty_memory_stack 
 end.
 
+Definition TT {A B}: A -> B -> Prop  := fun _ _ => True.
+Hint Unfold TT: core.
+
+
+Lemma test4 {E} :
+  forall (x:global_env * unit),
+  eutt eq (E:=E) (Ret x) (Ret (fst x, tt)).
+Proof.
+  intros.
+  assert (forall (x : (global_env * unit)), x = (fst x, snd x)). {
+    intros. destruct x0. reflexivity.
+  }
+  destruct x; destruct u.
+  
+  rewrite <- H at 1.  
+  reflexivity.
+Qed.
+
+Lemma test3 {E} : 
+  forall (t : itree E (global_env * unit)),
+
+x <- t ;; Ret x ≈ x <- t ;; Ret (fst x, tt).
+Proof.
+  intros.
+  setoid_rewrite <- test4.
+  reflexivity.
+Qed.
+
+
+
+Lemma test2 {E} :
+  forall (x:global_env * uvalue),
+  eutt eq (E:=E) (Ret x) (Ret (fst x, snd x)).
+Proof.
+  intros.
+  assert (forall (x : (global_env * uvalue)), x = (fst x, snd x)). {
+    intros. destruct x0. reflexivity.
+  }
+  destruct x. simpl.
+  reflexivity.
+Qed.
+
+
+Lemma test1 {E} : 
+  forall (t : itree E (global_env * uvalue)),
+
+x <- t ;; Ret x ≈ x <- t ;; Ret (fst x, snd x).
+Proof.
+  intros.
+  setoid_rewrite <- test2.
+  reflexivity.
+Qed.
+
+
+
+Lemma interp_cfg3_bind_ret_u : forall  (t : itree instr_E uvalue ) g l m,
+(exists g', interp_global (interp_intrinsics t) g ≈ Ret1 g' (UVALUE_I32 (Int32.repr 1))) ->
+(ℑ3 t g l m) ≈ (ℑ3 (t ;; Ret (UVALUE_I32 (Int32.repr 1))) g l m).
+Proof.
+
+
+  intros.
+  unfold interp_cfg3.
+  
+  unfold interp_memory.
+  unfold interp_state.
+  
+  assert (interp_intrinsics (t;; Ret (UVALUE_I32 (Int32.repr 1))) ≈ interp_intrinsics t;; Ret (UVALUE_I32 (Int32.repr 1))). {
+    CFGTactics.go.
+    setoid_rewrite interp_intrinsics_ret.
+    reflexivity.
+  } rewrite H0; clear H0.
+
+
+  unfold interp_global in *.
+  rewrite interp_state_bind .
+  setoid_rewrite interp_state_ret.
+
+  destruct H eqn:exits.
+  rewrite e.
+  rewrite bind_ret_.
+  simpl.
+reflexivity.
+
+Qed.
+ 
+
+Lemma interp_cfg3_bind_ret : forall  (t : itree instr_E unit ) g l m,
+(ℑ3 t g l m) ≈ (ℑ3 (t ;; Ret tt) g l m).
+Proof.
+  intros.
+  unfold interp_cfg3.
+  
+  unfold interp_memory.
+  unfold interp_state.
+  
+  assert (interp_intrinsics (t;; Ret tt) ≈ interp_intrinsics t;; Ret tt). {
+    CFGTactics.go.
+    setoid_rewrite interp_intrinsics_ret.
+    reflexivity.
+  } rewrite H; clear H.
+
+  unfold interp_global.
+  rewrite interp_state_bind .
+  setoid_rewrite interp_state_ret.
+  setoid_rewrite <- test3.
+  setoid_rewrite bind_ret_r.
+reflexivity.
+
+Qed.
+ 
 
 Local Ltac pose_interp3_alloca m' a' A AE:=
   match goal with
