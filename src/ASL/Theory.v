@@ -7,6 +7,49 @@ Import SemNotations.
 Import ListNotations.
 Import ITreeNotations.
 
+Locate eutt.
+
+Lemma test4 {E} :
+  forall (x:Semantics.env * unit),
+  eutt eq (E:=E) (Ret x) (Ret (fst x, tt)).
+Proof.
+  intros.
+  assert (forall (x : (Semantics.env * unit)), x = (fst x, snd x)). {
+    intros. destruct x0. reflexivity.
+  }
+  destruct x; destruct u.
+  
+  rewrite <- H at 1.  
+  reflexivity.
+Qed.
+
+Lemma test3 {E} : 
+  forall (t : itree E (Semantics.env * unit)),
+
+x <- t ;; Ret x ≈ x <- t ;; Ret (fst x, tt).
+Proof.
+  intros.
+  setoid_rewrite <- test4.
+  reflexivity.
+Qed.
+
+Lemma interp_asl_bind_ret {E}: forall t env,
+interp_asl (E:=E) t env ≈ interp_asl (t ;; Ret tt) env.
+Proof.
+  intros.
+  unfold interp_asl.
+  unfold MapDefault.interp_map .
+  rewrite interp_bind .
+  setoid_rewrite interp_ret.
+  rewrite interp_state_bind.
+  setoid_rewrite interp_state_ret . 
+  rewrite <- bind_ret_r at 1.
+  rewrite test3.
+  reflexivity.
+Qed.
+ 
+
+
 Lemma simpl_block : forall c,
   ⟦ [{|
            blk_id := Anon 0%Z;
@@ -32,6 +75,8 @@ rewrite denote_ocfg_unfold_in.
     setoid_rewrite bind_ret_.
     reflexivity.
 Qed.
+
+
 
 Lemma interp_asl_ret : forall (g:env) (E:Type->Type) (A:Type) x, interp_asl (E:=E) (A:=A) (Ret x) g ≈ Ret (g, x).
 Proof.
