@@ -25,6 +25,7 @@ Section Allocations.
   Fixpoint extract_vars (p : AST.stmt) (l : list string) : list string :=
     match p with
     | Skip => l
+    | Seq s1 s2 => extract_vars s2 (extract_vars s1 l)
     | Assign x e => if (is_present x l false) then l else (x::l) 
     end.
 
@@ -40,9 +41,10 @@ End Allocations.
 
 
 (* Given an ASL program, generate the instructions assuming the variables have been previously allocated *)
-Definition gen_body_code (p : AST.stmt) : code dtyp :=
+Fixpoint gen_body_code (p : AST.stmt) : code dtyp :=
   match p with
   | Skip => nil
+  | Seq s1 s2 => gen_body_code s1 ++ gen_body_code s2
   | Assign x v => match v with 
                   | Lit n => [(IVoid 0%Z, (INSTR_Store false ((DTYPE_I 32%N), (EXP_Integer (Int32.unsigned n))) (DTYPE_Pointer, (EXP_Ident (ID_Local (Name x)))) None))]
                   end
@@ -62,10 +64,10 @@ Definition generate_cfg (c : code dtyp) : cfg dtyp :=
 
 
 (* Convert a program in ASL AST form, into a LLVM AST form *)
-Definition compile (p : AST.stmt) : cfg dtyp :=
+Definition compile (p : AST.stmt) : code dtyp :=
   let alloc_code := gen_alloc_code p in
   let body_code  := gen_body_code  p in
-  generate_cfg (alloc_code ++ body_code).
+  body_code.
 
    
 
