@@ -7,6 +7,7 @@ From ExtLib Require Import Structures.Monad Data.Map.FMapAList Data.String.
 Import Monads.
 Import MonadNotation.
 Local Open Scope monad_scope.
+Local Open Scope list_scope.
 
 (* This is a trimmed down version of the Imp denotational semantics of the iTree tutorial *)
 
@@ -29,9 +30,23 @@ Section Denote.
   Fixpoint denote_asl (s : stmt) : itree eff unit :=
     match s with
     | Assign x e =>  v <- denote_expr e ;; trigger (SetVar x v)
-    | Seq s1 s2 =>  denote_asl s1 ;; denote_asl s2
     | Skip => ret tt
     end.
+
+  Fixpoint denote_prog (p : prog) : itree eff unit :=
+    match p with
+      | nil => ret tt
+      | h :: t => denote_asl h ;; denote_prog t
+    end.
+
+Fixpoint denote_decs (ds : decs) : itree eff unit :=
+  match ds with
+    | nil => ret tt
+    | h :: t => match h with | Var x => trigger (SetVar x (Int32.repr 0%Z)) end ;; denote_decs t
+end.
+
+
+
 
 End Denote.
 

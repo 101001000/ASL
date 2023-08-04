@@ -30,12 +30,13 @@ Arguments map : simpl never.
 (* Just a pretty way to call a new allocated variable of name x with value i*)
 Definition mem_stack_add (m:memory_stack) (x:string) (i:int32) :=
 match allocate m (DTYPE_I 32%N) with
-  | inr x => match write (fst x) (snd x) (DVALUE_I32 i) with
+  | inr x => match write (fst x) (fst (snd x), 0%Z) (DVALUE_I32 i) with
              | inr y => y
              | inl _ => empty_memory_stack 
             end
   | inl _ => empty_memory_stack 
 end.
+
 
 Definition TT {A B}: A -> B -> Prop  := fun _ _ => True.
 Hint Unfold TT: core.
@@ -157,6 +158,19 @@ Local Ltac pose_interp3_alloca m' a' A AE:=
       as [m' [a' [A AE]]]
   end.
 
+
+(* Lemma test_two_assigns : forall g l m,
+ℑ3 (⟦(IId (Name "x"), (INSTR_Op (OP_IBinop (LLVMAst.Add false false) (DTYPE_I 32%N) (EXP_Integer (0)%Z) (EXP_Integer (1)%Z))))⟧i ;; ⟦(IId (Name "x"), (INSTR_Op (OP_IBinop (LLVMAst.Add false false) (DTYPE_I 32%N) (EXP_Integer (0)%Z) (EXP_Integer (2)%Z))))⟧i) g l m
+≈ Ret3 [] [] empty_memory_stack tt.
+Proof.
+intros.
+Locate Maps.add.
+assert (⟦(OP_IBinop (LLVMAst.Add false false) (DTYPE_I 32%N) (EXP_Integer (0)%Z) (EXP_Integer (1)%Z)) ⟧e3 g l m ≈ Ret3 g l m (UVALUE_I32 (Int32.repr 3%Z))). {
+
+}
+ *)
+
+
 Lemma simpl_alloc : forall x g l m,
   ⟦(LLVMAst.IId (LLVMAst.Name x), LLVMAst.INSTR_Alloca (DynamicTypes.DTYPE_I 32) None None) ⟧i3 g l m ≈
   Ret3 g (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l)
@@ -183,6 +197,171 @@ Proof.
       unfold Maps.add. simpl. 
       reflexivity.
 Qed.
+
+
+
+From ITree Require Import Events.ExceptionFacts.
+From Vellvm Require Import Theory.LocalFrame.
+
+Lemma void_function_eq {E : Type -> Type} {X : Type} (f g : void -> itree E X) :
+  f = g.
+Proof.
+  Locate functional_extensionality.
+  apply Axioms.functional_extensionality.
+  intros x.
+  destruct x.
+Qed.
+
+
+
+
+Lemma simpl_assign_none : forall x i g l m,
+lookup (Name x) l = None ->
+ℑ3 (⟦(IVoid 0%Z, INSTR_Store false (DTYPE_I 32, EXP_Integer (Int32.unsigned i)) (DTYPE_Pointer, EXP_Ident (ID_Local (Name x))) None)⟧i) g l m
+≈ Exception.throw tt.
+Proof.
+  intros.
+  simpl denote_instr.
+  rewrite translate_ret.
+  rewrite bind_ret_.
+  cbn.
+  rewrite bind_ret_.
+  repeat rewrite translate_trigger.
+  ExpTactics.simplify_translations.
+  rewrite interp_cfg3_bind.
+  rewrite interp_cfg3_LR_fail.
+  2: {
+    apply H.
+  }
+  unfold raise.
+  rewrite bind_bind.
+  unfold print_msg.
+  unfold trigger.
+  rewrite bind_vis_.
+  setoid_rewrite bind_ret_.
+
+  assert ((fun x0 : void =>
+   x_ <- match x0 return (itree (CallE +' PickE +' UBE +' DebugE +' FailureE) (memory_stack * (local_env * res_L1))) with
+         end;;
+   (let (m', p) := x_ in
+    let (l', p0) := p in
+    let (g', x1) := p0 in
+    ℑ3
+      (da <- pickUnique x1;;
+       match da with
+       | DVALUE_I1 _ | DVALUE_I8 _ | DVALUE_I32 _ | DVALUE_I64 _ | DVALUE_Double _ | DVALUE_Float _ =>
+           vis (Store da (DVALUE_I32 (Int32.repr (Int32.unsigned i)))) (fun x3 : unit => Ret x3)
+       | DVALUE_Poison => raiseUB "Store to poisoned address."
+       | _ => vis (Store da (DVALUE_I32 (Int32.repr (Int32.unsigned i)))) (fun x2 : unit => Ret x2)
+       end) g' l' m')) = (fun x0 : void => match x0 return (itree (CallE +' PickE +' UBE +' DebugE +' FailureE) (memory_stack * (local_env * (global_env * unit)))) with
+         end)).
+  {
+    apply void_function_eq.
+  }
+
+  assert (vis (Exception.Throw tt)
+  (fun x0 : void =>
+   x_ <- match x0 return (itree (CallE +' PickE +' UBE +' DebugE +' FailureE) (memory_stack * (local_env * res_L1))) with
+         end;;
+   (let (m', p) := x_ in
+    let (l', p0) := p in
+    let (g', x1) := p0 in
+    ℑ3
+      (da <- pickUnique x1;;
+       match da with
+       | DVALUE_I1 _ | DVALUE_I8 _ | DVALUE_I32 _ | DVALUE_I64 _ | DVALUE_Double _ | DVALUE_Float _ =>
+           vis (Store da (DVALUE_I32 (Int32.repr (Int32.unsigned i)))) (fun x3 : unit => Ret x3)
+       | DVALUE_Poison => raiseUB "Store to poisoned address."
+       | _ => vis (Store da (DVALUE_I32 (Int32.repr (Int32.unsigned i)))) (fun x2 : unit => Ret x2)
+       end) g' l' m')) ≈ Exception.throw tt). { 
+
+    unfold Exception.throw.
+    rewrite H0.
+    reflexivity.
+  }
+  rewrite H1.
+
+  reflexivity.
+Qed.
+
+
+
+Lemma simpl_assign_2 : forall x i g l m ptr,
+allocated ptr m ->
+lookup (Name x) l = Some (UVALUE_Addr ptr) ->
+ℑ3 (⟦(IVoid 0%Z, INSTR_Store false (DTYPE_I 32, EXP_Integer (Int32.unsigned i)) (DTYPE_Pointer, EXP_Ident (ID_Local (Name x))) None)⟧i) g l m
+≈ Ret3 g l (match write m ptr (DVALUE_I32 i) with | inr x => x | _ => empty_memory_stack end) tt.
+Proof.
+  intros.
+  simpl denote_instr.
+  rewrite Int32.repr_unsigned.
+  rewrite translate_ret.
+  rewrite bind_ret_.
+  cbn.
+  rewrite bind_ret_.
+  repeat rewrite translate_trigger.
+  ExpTactics.simplify_translations.
+  rewrite interp_cfg3_bind.
+  rewrite interp_cfg3_LR.
+    2: {
+    Locate mapsto_lookup_alist.
+    apply H0.
+  }
+  rewrite bind_ret_.
+  cbn.
+  rewrite bind_ret_.
+  rewrite interp_cfg3_store .
+  + reflexivity.
+  + unfold write in *.
+    apply allocated_get_logical_block  in H.
+    destruct (get_logical_block m (fst ptr)).
+    - destruct l0.
+      cbn.
+      destruct ptr.
+      reflexivity.
+    - destruct H.
+      discriminate.
+Qed.
+
+Lemma simpl_assign : forall x i g l m ptr m',
+lookup (Name x) l = Some (UVALUE_Addr ptr) ->
+write m ptr (DVALUE_I32 (Int32.repr (Int32.unsigned i))) = inr m' ->
+ℑ3 (⟦(IVoid 0%Z, INSTR_Store false (DTYPE_I 32, EXP_Integer (Int32.unsigned i)) (DTYPE_Pointer, EXP_Ident (ID_Local (Name x))) None)⟧i) g l m
+≈ Ret3 g l m' tt.
+Proof.
+  intros.
+  simpl denote_instr.
+  rewrite translate_ret.
+  rewrite bind_ret_.
+  cbn.
+  rewrite bind_ret_.
+  repeat rewrite translate_trigger.
+  ExpTactics.simplify_translations.
+  rewrite interp_cfg3_bind.
+  rewrite interp_cfg3_LR.
+    2: {
+    Locate mapsto_lookup_alist.
+    apply H.
+  }
+  rewrite bind_ret_.
+  cbn.
+  rewrite bind_ret_.
+  rewrite interp_cfg3_store .
+  + reflexivity.
+  + apply H0.
+Qed.
+
+
+Lemma two_alloc : forall g l m,
+ℑ3 (⟦(IId (Name "test"), (INSTR_Alloca (DTYPE_I 32%N) None None))⟧i ;; ⟦(IId (Name "test"), (INSTR_Alloca (DTYPE_I 32%N) None None))⟧i) g l m
+≈ Ret3 [] [] empty_memory_stack tt.
+Proof.
+  intros.
+  rewrite interp_cfg3_bind.
+  setoid_rewrite simpl_alloc.
+  rewrite bind_ret_.
+  setoid_rewrite simpl_alloc.
+Admitted.
 
 
 Lemma simpl_alloca_assign : forall x i g l m,
@@ -635,7 +814,7 @@ Proof.
   apply write_read_neq with (val:=v) (a:=ptr'); auto; constructor.
 Qed.
 
-Lemma mem_stack_add_allocated : forall m ptr x i,
+(* Lemma mem_stack_add_allocated : forall m ptr x i,
   allocated ptr m ->
   read (mem_stack_add m x i) ptr (DTYPE_I 32) = inr (UVALUE_I32 i) ->
   read m ptr (DTYPE_I 32) = inr (UVALUE_I32 i).
@@ -648,7 +827,7 @@ Proof.
   destruct p; simpl in des_write.
   
   apply write_alloc with (m:=m) (v:= (DVALUE_I32 i)) (τ := DTYPE_I 32) (ptr' := a) (m2 := m0) (m1 := m1) in H; auto.
-Qed.
+Qed. *)
 
 
 Lemma get_logical_block_next_logical_key_none: forall m, get_logical_block m (next_logical_key m) = None.
@@ -704,3 +883,107 @@ Proof.
   rewrite H in H0.
   discriminate.
 Qed.
+
+
+
+Fixpoint add_variables (vars : decs) (m:memory_stack) (l:local_env) (g:global_env) : (memory_stack * (local_env * (global_env * unit))) :=
+match vars with
+| nil => (m, (l, (g, tt)))
+| h :: t => match h with
+            | Var x =>
+                let m' :=  (add_logical_block (next_logical_key m) (LBlock 8 (add_all_index (serialize_dvalue (DVALUE_I32 (Int32.repr 0))) 0 (make_empty_mem_block (DTYPE_I 32))) None)
+     (add_to_frame (add_logical_block (next_logical_key m) (make_empty_logical_block (DTYPE_I 32)) m) (next_logical_key m))) in
+                let l' := (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l) in
+                  add_variables t m' l' g
+            end
+end.
+
+
+Fixpoint add_variables_2 (vars : decs) (m:memory_stack) (l:local_env) (g:global_env) : (memory_stack * (local_env * (global_env * unit))) :=
+match vars with
+| nil => (m, (l, (g, tt)))
+| h :: t => match h with
+            | Var x =>
+              let l' := (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l) in
+              add_variables_2 t (mem_stack_add m x (Int32.repr 0%Z)) l' g
+            end
+end.
+
+Fixpoint add_variables_itree_2 (vars : decs) (m:memory_stack) (l:local_env) (g:global_env) : itree (CallE +' PickE +' UBE +' DebugE +' FailureE) (memory_stack * (local_env * (global_env * unit))) :=
+match vars with
+| nil => Ret (m, (l, (g, tt)))
+| h :: t => match h with
+            | Var x =>
+              let l' := (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l) in
+              Tau (add_variables_itree_2 t (mem_stack_add m x (Int32.repr 0%Z)) l' g)
+            end
+end.
+
+
+
+Fixpoint add_variables_itree (vars : decs) (m:memory_stack) (l:local_env) (g:global_env) : itree (CallE +' PickE +' UBE +' DebugE +' FailureE) (memory_stack * (local_env * (global_env * unit))) :=
+match vars with
+| nil => Ret (m, (l, (g, tt)))
+| h :: t => match h with
+            | Var x =>
+                let m' :=   (add_logical_block (next_logical_key m) (LBlock 8 (add_all_index (serialize_dvalue (DVALUE_I32 (Int32.repr 0))) 0 (make_empty_mem_block (DTYPE_I 32))) None)
+     (add_to_frame (add_logical_block (next_logical_key m) (make_empty_logical_block (DTYPE_I 32)) m) (next_logical_key m))) in
+                let l' := (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l) in
+                  Tau (add_variables_itree t m' l' g)
+            end
+end.
+
+Lemma add_variables_itree_binds :
+forall l m x t g,
+add_variables_itree (Var x :: t) m l g ≈ x_ <- add_variables_itree [Var x] m l g ;; let '(m', (l', (g', tt))) := x_ in add_variables_itree t m' l' g'.
+Proof.
+intros.
+simpl.
+repeat rewrite tau_eutt.
+rewrite bind_ret_.
+subst.
+reflexivity.
+Qed.
+
+Lemma add_variables_2_itree_binds :
+forall l m x t g,
+add_variables_itree_2 (Var x :: t) m l g ≈ x_ <- add_variables_itree_2 [Var x] m l g ;; let '(m', (l', (g', tt))) := x_ in add_variables_itree_2 t m' l' g'.
+Proof.
+intros.
+simpl.
+repeat rewrite tau_eutt.
+rewrite bind_ret_.
+subst.
+reflexivity.
+Qed.
+
+Lemma add_variables_is_itree: 
+forall ds m l g, 
+  add_variables_itree ds m l g ≈ Ret (add_variables ds m l g).
+Proof.
+induction ds.
++ simpl; reflexivity.
++ intros.
+  destruct a.
+  simpl.
+  setoid_rewrite IHds.
+  tau_steps.
+reflexivity.
+Qed.
+
+Lemma add_variables_is_itree_2: 
+forall ds m l g, 
+  add_variables_itree_2 ds m l g ≈ Ret (add_variables_2 ds m l g).
+Proof.
+induction ds.
++ simpl; reflexivity.
++ intros.
+  destruct a.
+  simpl.
+  setoid_rewrite IHds.
+  tau_steps.
+reflexivity.
+Qed.
+
+
+

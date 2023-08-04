@@ -5,4 +5,5 @@
 -R ../vellvm/lib/flocq-quickchick FlocqQuickChick
 -R ./ASL ASL
 -R ./Compiler ASLCompiler
+-R ./tutorial ITreeTutorial
 -R ./LLVM LLVMExtra
