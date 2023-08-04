@@ -7,6 +7,7 @@ From ExtLib Require Import Structures.Monad Data.Map.FMapAList Data.String.
 Import Monads.
 Import MonadNotation.
 Local Open Scope monad_scope.
+Local Open Scope list_scope.
 
 (* This is a trimmed down version of the Imp denotational semantics of the iTree tutorial *)
 
@@ -32,6 +33,21 @@ Section Denote.
     | Skip => ret tt
     end.
 
+  Fixpoint denote_prog (p : prog) : itree eff unit :=
+    match p with
+      | nil => ret tt
+      | h :: t => denote_asl h ;; denote_prog t
+    end.
+
+Fixpoint denote_decs (ds : decs) : itree eff unit :=
+  match ds with
+    | nil => ret tt
+    | h :: t => match h with | Var x => trigger (SetVar x (Int32.repr 0%Z)) end ;; denote_decs t
+end.
+
+
+
+
 End Denote.
 
 Section Interpretation.
@@ -51,7 +67,6 @@ Section InterpretationProperties.
 
   Context {E': Type -> Type}.
   Notation E := (State +' E').
-
 
   (** This interpreter is compatible with the equivalence-up-to-tau. *)
   Global Instance eutt_interp_imp {R}:
@@ -81,5 +96,7 @@ Section InterpretationProperties.
     simpl.
     reflexivity.
   Qed.
+
+
 
 End InterpretationProperties.
