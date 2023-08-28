@@ -1220,8 +1220,6 @@ destruct H0, H1.
   apply maximumBy_Z_correct with (def:=(-1)%Z) in H1.
   give_up.
 + apply H in H0.
-+
-+
 
 Admitted.
 

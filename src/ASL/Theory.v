@@ -18,7 +18,7 @@ Qed.
 
 Fixpoint expr_dec (e1 e2 : expr) : {e1 = e2} + {e1 <> e2}.
 Proof.
-  decide equality. apply Int32.eq_dec.
+  decide equality. apply Int32.eq_dec. apply string_dec.
 Defined.
 
 Fixpoint stmt_dec (s1 s2 : stmt) : {s1 = s2} + {s1 <> s2}.

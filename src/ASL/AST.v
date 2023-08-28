@@ -4,12 +4,13 @@ From Coq Require Import Strings.String.
 From Vellvm Require Import Semantics.DynamicValues.
 
 Inductive dec :=
-  | Var (x:string).
+  | DVar (x:string).
 
 Definition decs := list dec.
 
 Inductive expr : Type :=
-| Lit (_ : int32).
+| Lit (_ : int32)
+| Var (_ : string).
 
 Inductive stmt : Type :=
 | Assign (x : string) (e : expr)

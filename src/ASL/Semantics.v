@@ -12,7 +12,8 @@ Local Open Scope list_scope.
 (* This is a trimmed down version of the Imp denotational semantics of the iTree tutorial *)
 
 Variant State : Type -> Type :=
-| SetVar (x : string) (v : int32) : State unit.
+| SetVar (x : string) (v : int32) : State unit
+| GetVar (x : string)             : State int32.
 
 (* We model the env state as a map of string-int32*)
 Definition env := alist string int32.
@@ -25,6 +26,7 @@ Section Denote.
   Fixpoint denote_expr (e : expr) : itree eff int32 :=
     match e with
     | Lit n     => ret n
+    | Var x     => trigger (GetVar x)
     end.
 
   Fixpoint denote_asl (s : stmt) : itree eff unit :=
@@ -42,7 +44,7 @@ Section Denote.
 Fixpoint denote_decs (ds : decs) : itree eff unit :=
   match ds with
     | nil => ret tt
-    | h :: t => match h with | Var x => trigger (SetVar x (Int32.repr 0%Z)) end ;; denote_decs t
+    | h :: t => match h with | DVar x => trigger (SetVar x (Int32.repr 0%Z)) end ;; denote_decs t
 end.
 
 
@@ -55,6 +57,7 @@ Section Interpretation.
   Definition handle_State {E: Type -> Type} `{mapE string (Int32.repr 0%Z) -< E}: State ~> itree E :=
   fun _ e => match e with
              | SetVar x v => insert x v
+             | GetVar x => lookup_def x
              end.
 
   Definition interp_asl  {E A} (t : itree (State +' E) A) : stateT env (itree E) A :=

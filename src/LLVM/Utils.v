@@ -890,7 +890,7 @@ Fixpoint add_variables (vars : decs) (m:memory_stack) (l:local_env) (g:global_en
 match vars with
 | nil => (m, (l, (g, tt)))
 | h :: t => match h with
-            | Var x =>
+            | DVar x =>
                 let m' :=  (add_logical_block (next_logical_key m) (LBlock 8 (add_all_index (serialize_dvalue (DVALUE_I32 (Int32.repr 0))) 0 (make_empty_mem_block (DTYPE_I 32))) None)
      (add_to_frame (add_logical_block (next_logical_key m) (make_empty_logical_block (DTYPE_I 32)) m) (next_logical_key m))) in
                 let l' := (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l) in
@@ -903,7 +903,7 @@ Fixpoint add_variables_2 (vars : decs) (m:memory_stack) (l:local_env) (g:global_
 match vars with
 | nil => (m, (l, (g, tt)))
 | h :: t => match h with
-            | Var x =>
+            | DVar x =>
               let l' := (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l) in
               add_variables_2 t (mem_stack_add m x (Int32.repr 0%Z)) l' g
             end
@@ -913,7 +913,7 @@ Fixpoint add_variables_itree_2 (vars : decs) (m:memory_stack) (l:local_env) (g:g
 match vars with
 | nil => Ret (m, (l, (g, tt)))
 | h :: t => match h with
-            | Var x =>
+            | DVar x =>
               let l' := (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l) in
               Tau (add_variables_itree_2 t (mem_stack_add m x (Int32.repr 0%Z)) l' g)
             end
@@ -925,7 +925,7 @@ Fixpoint add_variables_itree (vars : decs) (m:memory_stack) (l:local_env) (g:glo
 match vars with
 | nil => Ret (m, (l, (g, tt)))
 | h :: t => match h with
-            | Var x =>
+            | DVar x =>
                 let m' :=   (add_logical_block (next_logical_key m) (LBlock 8 (add_all_index (serialize_dvalue (DVALUE_I32 (Int32.repr 0))) 0 (make_empty_mem_block (DTYPE_I 32))) None)
      (add_to_frame (add_logical_block (next_logical_key m) (make_empty_logical_block (DTYPE_I 32)) m) (next_logical_key m))) in
                 let l' := (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l) in
@@ -935,7 +935,7 @@ end.
 
 Lemma add_variables_itree_binds :
 forall l m x t g,
-add_variables_itree (Var x :: t) m l g ≈ x_ <- add_variables_itree [Var x] m l g ;; let '(m', (l', (g', tt))) := x_ in add_variables_itree t m' l' g'.
+add_variables_itree (DVar x :: t) m l g ≈ x_ <- add_variables_itree [DVar x] m l g ;; let '(m', (l', (g', tt))) := x_ in add_variables_itree t m' l' g'.
 Proof.
 intros.
 simpl.
@@ -947,7 +947,7 @@ Qed.
 
 Lemma add_variables_2_itree_binds :
 forall l m x t g,
-add_variables_itree_2 (Var x :: t) m l g ≈ x_ <- add_variables_itree_2 [Var x] m l g ;; let '(m', (l', (g', tt))) := x_ in add_variables_itree_2 t m' l' g'.
+add_variables_itree_2 (DVar x :: t) m l g ≈ x_ <- add_variables_itree_2 [DVar x] m l g ;; let '(m', (l', (g', tt))) := x_ in add_variables_itree_2 t m' l' g'.
 Proof.
 intros.
 simpl.
