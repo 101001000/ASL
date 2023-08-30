@@ -1,0 +1,570 @@
+From Coq       Require Import String BinNat ZArith.
+From Vellvm    Require Import Syntax Semantics Utils.AListFacts.
+From ASL       Require Import Semantics.
+From LLVMExtra Require Import Utils.
+
+(* Get the Z value of a variable name X in the memory *)
+Definition get_val (g: global_env) (l: local_env) (m: memory_stack) (x: string) : option int32 :=
+  let addr := FMapAList.alist_find (Name x) l
+  in match addr with 
+    | Some (UVALUE_Addr ptr) =>
+        let val := read m ptr (DTYPE_I 32%N) in 
+        match val with
+          | inl _ => None
+          | inr v => match v with
+                      | UVALUE_I32 i => Some i
+                      | _ => None
+                     end
+        end
+    | _ => None
+  end.
+
+
+Definition Renvh (env_asl : env) (g_llvm : global_env) (l_llvm : local_env) (m_llvm : memory_stack) : Prop :=
+forall k v, (alist_In k env_asl v <-> get_val g_llvm l_llvm m_llvm k = Some v)
+/\ (FMapAList.alist_find k env_asl = None <-> FMapAList.alist_find (Name k) l_llvm = None).
+
+
+Lemma get_val_no_fresh_ptr : forall g l m x i z,
+  get_val g l m x = Some i -> 
+  FMapAList.alist_find (Name x) l <> Some (UVALUE_Addr (next_logical_key m, z)).
+Proof.
+  intros.
+  unfold get_val in H.
+  destruct (FMapAList.alist_find (Name x)) eqn:HDfind in H; try discriminate.
+  destruct u; try discriminate.
+  destruct read eqn:HDread; try discriminate.
+  destruct u; try discriminate.
+  clear H i.
+  apply read_fresh in HDread.
+  rewrite HDfind.
+  intro cont.
+  inversion cont.
+  subst a.
+  simpl in HDread.
+  contradiction.
+Qed.
+  
+Lemma next_logical_key_not_in_Renvh : forall env g l m x,
+  Renvh env g l m ->
+  forall z,
+  FMapAList.alist_find (Name x) l <> Some (UVALUE_Addr (next_logical_key m, z)).
+Proof.
+  intros e g l m x HRenv z.
+  unfold Renvh in HRenv.
+  specialize HRenv with (k:=x).
+
+  unfold alist_In in HRenv.
+  destruct (FMapAList.alist_find x e).
+  + specialize HRenv with (v := i).
+    destruct HRenv.
+    assert (Some i = Some i); auto.
+    apply H in H1; clear H.
+    apply get_val_no_fresh_ptr with (z:=z) in H1.
+    auto.
+  + specialize HRenv with (v := Int32.repr 0).
+    destruct HRenv.
+    assert (None (A:=int32) = None); auto.
+    apply H0 in H1.
+    rewrite H1.
+    intros not.
+    discriminate.
+Qed.
+
+Lemma aux: 
+forall (ptr:Z*Z) m,
+  (forall z, ptr <> (next_logical_key m, z)) -> fst ptr <> next_logical_key m.
+Proof.
+  intros.
+  destruct ptr.
+  unfold fst.
+  intro H1.
+  rewrite H1 in H.
+  specialize H with (z:=z0).
+  contradiction.
+Qed.
+
+
+Lemma get_val_mem_stack_add: forall g env l m k x i v,
+  Renvh env g l m ->
+  (get_val g l (mem_stack_add m x i) k = Some v) -> (get_val g l m k = Some v).
+Proof.
+  unfold get_val.
+  intros.
+  destruct (FMapAList.alist_find (Name k) l) eqn:HDfind; try discriminate.
+  destruct u; try discriminate.
+  destruct a.
+  pose proof same_read_mem_stack_add_eq.
+  specialize H1 with (ptr:=(z,z0)) (x:=x) (z:=i) (m:=m).
+  apply next_logical_key_not_in_Renvh with (x:=k) (z:=z0) in H.
+  rewrite HDfind in H.
+  assert (z <> next_logical_key m). {
+    intros cont.
+    subst z.
+    contradiction.
+  }
+  clear H.
+  simpl in H1.
+  apply H1 in H2.
+  rewrite <- H2 in H0.
+  auto.
+Qed.
+
+(* Lemma RenvhAssign2 : forall env g l m i,
+  RAlloc env l m ->
+  Renvh env g l m ->
+  Renvh env g l (match write m (FMapAList.alist_find (Name k) l) (DVALUE_I32 i) with inr m' => m' end).
+Proof.
+  unfold Renvh in *.
+  intros env g l m i ptr m' HFind HWrite.
+  split.
+  + unfold get_val in *.
+    split.
+    - intros.
+      setoid_rewrite HFind in H.
+      setoid_rewrite HFind.
+    
+  + apply H1. auto.
+Qed.
+ *)
+
+
+Lemma RenvhAssign :
+  forall env_asl g_llvm l_llvm m_llvm x i,
+  Renvh env_asl g_llvm l_llvm m_llvm -> Renvh (FMapAList.alist_add x i env_asl) g_llvm (FMapAList.alist_add (LLVMAst.Name x) (UVALUE_Addr (next_logical_key m_llvm, 0%Z)) l_llvm)
+    (mem_stack_add m_llvm x i).
+Proof.
+  intros env_asl g_llvm l_llvm m_llvm x i H0 k v.
+  unfold get_val.
+  split.
+  split.
+  (*First, we need to ensure that every variable-value pair inside env_asl, implies it's also in llvm memory.*)
+  + destruct (String.eqb_spec k x).
+    (* We analyze the case where the variable added was in the Renv relationship before, so its being overwritten.*)
+    - subst.
+      unfold alist_In.
+      intros.
+      rewrite alist_find_add_eq in H.
+      rewrite alist_find_add_eq .
+        unfold read. simpl.
+        unfold mem_stack_add.
+        simpl.
+        unfold write.
+        rewrite get_logical_block_of_add_to_frame .
+        rewrite get_logical_block_of_add_logical_block.
+        Arguments add_all_index : simpl never.
+        Arguments serialize_dvalue : simpl never.
+        simpl get_logical_block.
+        rewrite get_logical_block_of_add_logical_block.
+        unfold read_in_mem_block.
+        rewrite deserialize_serialize; try constructor.
+        auto.
+      - 
+      (* We analyze the case where the variable added is new*)
+        unfold alist_In.
+        intros.
+        (* This block can be simplified *)
+        assert (FMapAList.alist_find k (FMapAList.alist_add x i env_asl) = FMapAList.alist_find k env_asl). {
+          apply alist_find_neq . auto.
+        }
+        rewrite H1 in H.
+        (* ---------------------------- *)
+        unfold Renvh in H0.
+        unfold alist_In in H0.
+        unfold get_val in H0.
+        apply H0 in H.
+        rewrite alist_find_neq.
+        -- destruct (FMapAList.alist_find (Name k) l_llvm); try discriminate.
+           destruct u; try discriminate.
+           apply correct_read.
+           apply correct_read in H.
+           pose proof same_read_mem_stack_add.
+           auto.
+        -- (* We prove that k <> x -> Name k <> Name x *)
+           unfold not.
+           intros H'.
+           inversion H'.
+           contradiction.
+
+   + intros Mem_value.
+     unfold alist_In.
+     destruct (String.eqb_spec k x).
+     - subst.
+       rewrite alist_find_add_eq. 
+       rewrite alist_find_add_eq in Mem_value.
+       apply correct_read in Mem_value.
+       f_equal.
+       pose proof read_result.
+       specialize H with (m_llvm := m_llvm) (x := x).
+       apply H. auto.
+      - 
+        apply names_neq in n as diff_names.
+        rewrite alist_find_neq; auto.
+        rewrite alist_find_neq in Mem_value; auto.
+        
+        pose proof H0.
+        unfold Renvh in H.
+        apply H.
+
+        apply get_val_mem_stack_add with (k:=k) (x:=x) (i:=i) (v:=v) in H0; auto.
+        
+  + split.
+
+   - intros.
+     destruct (String.eqb_spec k x).
+     -- subst.
+        pose proof alist_find_add_eq (K:=string) (V:=int32).
+        specialize H1 with (k := x) (v := i) (m:=env_asl).
+        rewrite H in H1.
+        discriminate.
+     -- apply names_neq in n as NameNeq.
+        rewrite alist_find_neq; auto.
+        rewrite alist_find_neq in H; auto.
+        unfold Renvh in H0.
+        apply H0 in H; auto.
+
+   - intros.
+    destruct (String.eqb_spec k x).
+    -- subst. 
+       pose proof alist_find_add_eq (K:=raw_id) (V:=uvalue).
+       specialize H1 with (k := (Name x)) (v := (UVALUE_Addr (next_logical_key m_llvm, 0%Z))) (m:=l_llvm).
+       rewrite H in H1.
+       discriminate.
+    -- apply names_neq in n as NameNeq.
+        rewrite alist_find_neq; auto.
+        rewrite alist_find_neq in H; auto.
+        unfold Renvh in H0.
+        apply H0 in H; auto.
+Qed.
+
+Fixpoint addr_dec (a1 a2 : addr) : {a1 = a2} + {a1 <> a2}.
+Proof.
+  destruct a1, a2.
+  decide equality. 
+  apply Z.eq_dec.
+  apply Z.eq_dec.
+Defined.
+
+
+Lemma read_same_after_write : forall m ptr i ,
+allocated ptr m ->
+read
+    match write m ptr (DVALUE_I32 (Int32.repr (Int32.unsigned i))) with
+    | inl _ => empty_memory_stack
+    | inr x1 => x1
+    end ptr (DTYPE_I 32) = inr (UVALUE_I32 (Int32.repr (Int32.unsigned i))).
+Proof.
+intros.
+unfold write.
+destruct get_logical_block eqn:EQ.
++ destruct l.
+  destruct ptr.
+  unfold read.
+  simpl.
+  rewrite get_logical_block_of_add_logical_block.
+  Arguments add_all_index : simpl never.
+  Arguments serialize_dvalue : simpl never.
+  unfold read_in_mem_block.
+  rewrite deserialize_serialize; try constructor.
++ apply allocated_get_logical_block in H.
+  rewrite EQ in H.
+  destruct H.
+  discriminate.
+Qed.
+
+
+Lemma get_val_same_ptrs: forall g l m x i ptr,
+allocated ptr m ->
+FMapAList.alist_find (Name x) l = Some (UVALUE_Addr ptr) ->
+get_val g l
+  match write m ptr (DVALUE_I32 (Int32.repr (Int32.unsigned i))) with
+  | inl _ => empty_memory_stack
+  | inr x1 => x1
+  end x = Some i.
+Proof.
+intros.
+unfold get_val in *.
+rewrite H0 in *.
+rewrite read_same_after_write; auto.
+rewrite Int32.repr_unsigned; auto.
+Qed.
+
+Lemma get_val_diff_ptrs : forall g l m x ptr ptr' v i,
+allocated ptr m ->
+FMapAList.alist_find (Name x) l = Some (UVALUE_Addr ptr') ->
+ptr <> ptr' ->
+get_val g l m x = Some v ->
+get_val g l
+  match write m ptr (DVALUE_I32 (Int32.repr (Int32.unsigned i))) with
+  | inl _ => empty_memory_stack
+  | inr x1 => x1
+  end x = Some v.
+Proof.
+intros.
+unfold get_val in *.
+rewrite H0.
+rewrite H0 in H2.
+destruct read eqn:EQ in H2; try discriminate.
+destruct u; try discriminate.
+injection H2; intros; subst; clear H2.
+destruct write eqn:WRITE.
++ apply allocated_get_logical_block in H.
+  unfold write in WRITE.
+  destruct H.
+  rewrite H in WRITE.
+  destruct x0 in WRITE.
+  destruct ptr in WRITE.
+  simpl in WRITE.
+  discriminate.
++ rewrite write_untouched with (m1:=m) (a:=ptr) (v:=(DVALUE_I32 (Int32.repr (Int32.unsigned i)))) (τ:=DTYPE_I 32); auto.
+  - rewrite EQ.
+    reflexivity.
+  - constructor.
+  - unfold no_overlap_dtyp.
+    unfold no_overlap.
+
+
+
+
+    
+Qed.
+
+Lemma get_val_diff_ptrs : forall g l m x ptr ptr' v i,
+allocated ptr m ->
+FMapAList.alist_find (Name x) l = Some (UVALUE_Addr ptr') ->
+fst ptr <> fst ptr' ->
+get_val g l m x = Some v ->
+get_val g l
+  match write m ptr (DVALUE_I32 (Int32.repr (Int32.unsigned i))) with
+  | inl _ => empty_memory_stack
+  | inr x1 => x1
+  end x = Some v.
+Proof.
+intros.
+unfold get_val in *.
+rewrite H0 in *.
+destruct read eqn:EQ in H2; try discriminate.
+destruct u; try discriminate.
+injection H2; intros; subst; clear H2.
+destruct write eqn:WRITE.
++ apply allocated_get_logical_block in H.
+  unfold write in WRITE.
+  destruct H.
+  rewrite H in WRITE.
+  destruct x0 in WRITE.
+  destruct ptr in WRITE.
+  simpl in WRITE.
+  discriminate.
++ rewrite write_untouched with (m1:=m) (a:=ptr) (v:=(DVALUE_I32 (Int32.repr (Int32.unsigned i)))) (τ:=DTYPE_I 32); auto.
+  - rewrite EQ.
+    reflexivity.
+  - constructor.
+  - unfold no_overlap_dtyp.
+    unfold no_overlap.
+    auto.    
+Qed. *)
+
+
+Definition no_offset (ptr:addr) := snd ptr = 0%Z.
+
+Lemma Renv_holds : forall e g l m i x ptr,
+allocated ptr m ->
+no_offset ptr ->
+FMapAList.alist_find (Name x) l = Some (UVALUE_Addr ptr) ->
+FMapAList.alist_find x e = Some i ->
+Renvh e g l m ->
+Renvh (FMapAList.alist_add x i e) g l
+  match write m ptr (DVALUE_I32 (Int32.repr (Int32.unsigned i))) with
+  | inl _ => empty_memory_stack
+  | inr x1 => x1
+  end.
+Proof.
+intros.
+unfold Renvh in *.
+split.
++ split.
+  - intros.
+    destruct (String.eqb_spec k x); subst.
+    -- rewrite get_val_same_ptrs; auto.
+       apply alist_In_add_eq in H4.
+       subst.
+       reflexivity.
+    -- apply In_add_In_ineq in H4; auto.
+       apply H3 in H4.
+       pose proof H4.
+       unfold get_val in *.
+       destruct (FMapAList.alist_find (Name k) l); try discriminate.
+       destruct u; try discriminate.
+       destruct (Z.eq_dec (fst ptr) (fst a)).
+       --- destruct a, ptr.
+           simpl in *; subst.
+           destruct write eqn:WRITE.
+           ---- apply allocated_get_logical_block in H.
+                destruct H.
+                unfold write in WRITE.
+                rewrite H in WRITE.
+                destruct x0 in WRITE.
+                simpl in WRITE.
+                discriminate.
+           ---- unfold write in WRITE.
+                destruct get_logical_block in WRITE; try discriminate.
+                destruct l0 in WRITE.
+                simpl in WRITE.
+                injection WRITE; intros; subst.
+                unfold read.
+                rewrite get_logical_block_of_add_logical_block.
+                simpl.
+                Arguments add_all_index : simpl never.
+                Arguments serialize_dvalue : simpl never.
+                unfold no_offset in H0.
+                simpl in H0; subst.
+                unfold read_in_mem_block.
+      
+
+
+           unfold get_val in *.
+           destruct (FMapAList.alist_find (Name k) l); try discriminate.
+           destruct u; try discriminate.
+           give_up.
+       ---
+ 
+
+  
++ split.
+  - intros.
+    destruct (String.eqb_spec k x); subst.
+    -- rewrite alist_find_add_eq in H3; discriminate.
+    -- rewrite alist_find_neq in H3; auto.
+       apply H2 in H3; auto.
+  - intros.
+    destruct (String.eqb_spec k x); subst.
+    -- rewrite H0 in H3.
+       discriminate.
+    -- rewrite alist_find_neq; auto.
+       apply H2; auto.
+
+
+
+(* 
+Lemma get_val_neq :
+forall k x g l m v,
+k <> x ->
+get_val g l m k = Some v ->
+get_val g (FMapAList.alist_add (Name x) (UVALUE_Addr (next_logical_key m, 0%Z)) l)
+  (add_logical_block (next_logical_key m)
+         (LBlock 8 (add_all_index (serialize_dvalue (DVALUE_I32 (Int32.repr 0))) 0 (make_empty_mem_block (DTYPE_I 32))) None)
+         (add_to_frame (add_logical_block (next_logical_key m) (make_empty_logical_block (DTYPE_I 32)) m) (next_logical_key m))) k =
+Some v.
+Proof.
+intros.
+unfold get_val in *.
+unfold read.
+
+
+rewrite alist_find_neq; try apply names_neq in H; auto.
+
+pose proof read_after_alloc_write.
+
+destruct (FMapAList.alist_find (Name k) l); auto.
+destruct u; auto.
+destruct (read m a (DTYPE_I 32)) eqn:ERead; try discriminate.
+destruct u; try discriminate.
+injection H0; intros; subst; clear H0.
+
+set (m2 := (add_logical_block (next_logical_key m)
+       (LBlock 8
+          (add_all_index (serialize_dvalue (DVALUE_I32 (Int32.repr 0))) 0 (make_empty_mem_block (DTYPE_I 32)))
+          None)
+       (add_to_frame (add_logical_block (next_logical_key m) (make_empty_logical_block (DTYPE_I 32)) m)
+          (next_logical_key m)))).
+
+set (m1 := (add_to_frame (add_logical_block (next_logical_key m) (make_empty_logical_block (DTYPE_I 32)) m) (next_logical_key m))).
+
+destruct (read m2 a (DTYPE_I 32)) eqn:ERead2.
++ rewrite H1 with (m:=m) (m1:=m1) (v:=v) (z:=Int32.repr 0%Z) (ptr':=(0%Z, next_logical_key m)) in ERead2; auto.
+
+apply H1 with (m1:=m1) (m2:=m2) (ptr':=(0%Z, next_logical_key m)) (z:=Int32.repr 0%Z) in ERead.
+
++
+
+
+pose proof read_after_alloc_write.
+
+
+rewrite <- H0; clear H0.
+rewrite alist_find_neq; try apply names_neq in H; auto.
+destruct (FMapAList.alist_find (Name k) l); auto.
+destruct u; auto.
+
+apply names_neq in H.
+rewrite alist_find_neq; auto.
+destruct (FMapAList.alist_find (Name k) l); try discriminate.
+destruct u; try discriminate.
+destruct (read m a (DTYPE_I 32)) eqn:Test; try discriminate.
+destruct u; try discriminate.
+unfold read.
+simpl.
+rewrite get_logical_block_of_add_logical_block .
+rewrite get_logical_block_add_to_frame .
+
+
+assert (read (add_to_frame (add_logical_block (next_logical_key m) (make_empty_logical_block (DTYPE_I 32)) m) (next_logical_key m)) a
+    (DTYPE_I 32) = inr (UVALUE_I32 x0)). {
+rewrite <- Test; clear Test.
+
+unfold read.
+rewrite get_logical_block_add_to_frame . *) 
+
+
+
+Lemma RenvhInitialize :
+  forall env_asl g_llvm l_llvm m_llvm x,
+  Renvh env_asl g_llvm l_llvm m_llvm -> Renvh (FMapAList.alist_add x (Int32.repr 0) env_asl) g_llvm (FMapAList.alist_add (LLVMAst.Name x) (UVALUE_Addr (next_logical_key m_llvm, 0%Z)) l_llvm)
+   (add_logical_block (next_logical_key m_llvm)
+         (LBlock 8 (add_all_index (serialize_dvalue (DVALUE_I32 (Int32.repr 0))) 0 (make_empty_mem_block (DTYPE_I 32))) None)
+         (add_to_frame (add_logical_block (next_logical_key m_llvm) (make_empty_logical_block (DTYPE_I 32)) m_llvm) (next_logical_key m_llvm))).
+intros.
+unfold Renvh in *.
+split.
++ split.
+  - destruct (String.eqb_spec k x).
+    -- (* subst.
+       unfold alist_In in *.
+       rewrite alist_find_add_eq.
+       intros.
+       injection H0; intros; clear H0.
+       
+
+       subst. *)
+      give_up.
+    -- unfold alist_In in *.
+       rewrite alist_find_neq; auto.
+       intros.
+       apply H in H0.
+      give_up.
+
+       
+
+  - give_up.
++ split.
+  - destruct (String.eqb_spec k x).
+    -- subst.
+       repeat rewrite alist_find_add_eq.
+       intros.
+       discriminate.
+    -- intros.
+       rewrite alist_find_neq in H0; auto.
+       apply names_neq in n.
+       rewrite alist_find_neq; auto.
+       apply H in H0; auto.
+  - destruct (String.eqb_spec k x).
+    -- subst.
+       repeat rewrite alist_find_add_eq.
+       intros.
+       discriminate.
+    -- intros.
+       rewrite alist_find_neq; auto.
+       apply names_neq in n.
+       rewrite alist_find_neq in H0; auto.
+       apply H in H0; auto.
+Admitted.

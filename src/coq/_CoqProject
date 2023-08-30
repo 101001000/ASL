@@ -1,0 +1,18 @@
+-R ../../vellvm/src/coq Vellvm
+-I ../../vellvm/lib/QuickChick/src
+-I ../../vellvm/lib/QuickChick/plugin
+-R ../../vellvm/lib/QuickChick/src QuickChick
+-R ../../vellvm/lib/flocq-quickchick FlocqQuickChick
+
+-R ./Lang Lang
+Lang/AST.v
+Lang/Semantics.v
+Lang/Theory.v
+
+-R ./Compiler Compiler
+Compiler/Compiler.v
+Compiler/Renv.v
+Compiler/CompilerCorrectness.v
+Compiler/LLVMUtils.v
+
+../extracted/Extract.v
