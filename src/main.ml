@@ -3,10 +3,20 @@ open AST
 open ParseUtil
 open Format
 
+let rec id_instr_list ppf lst =
+  match lst with
+  | [] -> () (* Do nothing for empty list *)
+  | (id, inst) :: rest ->
+    begin
+      Llvm_printer.id_instr ppf (id, inst);      (* Print the current instruction *)
+      Format.fprintf ppf "@\n";     (* Print a newline after each instruction for clarity *)
+      id_instr_list ppf rest        (* Process the rest of the list *)
+    end
+
 let input = Sys.argv.(1)
 
 let string_of_dec (e: dec) : string =
-  "var1 " ^ Camlcoq.camlstring_of_coqstring e ^ ";"
+  "var " ^ Camlcoq.camlstring_of_coqstring e ^ ";"
 
 let string_of_decs (ds: dec list) : string =
   String.concat "\n" (List.map string_of_dec ds)
@@ -30,7 +40,10 @@ let main () =
 	let buf = Lexing.from_string input in
 		try
 			let result = Parser.main Lexer.token buf in
-				Printf.printf "%s\n" (string_of_prog result)
+				Printf.printf "%s\n" (string_of_prog result);
+				let llvm_ast = Compiler.compile result in
+					id_instr_list Format.std_formatter llvm_ast; 
+					
 		with
 		| Lexer.Error msg ->
 			Printf.printf "lexer error %s\n" msg
