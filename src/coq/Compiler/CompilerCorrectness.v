@@ -213,7 +213,7 @@ Qed.
 
 Lemma rewrite_prealloc :
 forall ds g l m,
-⟦ compile_decs ds ⟧c3 g l m ≈ Ret (add_variables ds m l g).
+⟦ (compile_decs ds) ⟧c3 g l m ≈ Ret (add_variables ds m l g).
 Proof.
 induction ds.
 + intros.
@@ -244,7 +244,7 @@ rewrite H; clear H.
   simpl compile_decs.
   rewrite cons_app2.
   repeat setoid_rewrite DenotationTheory.denote_code_app.
-  rewrite InterpreterCFG.interp_cfg3_bind.
+  setoid_rewrite InterpreterCFG.interp_cfg3_bind.
   apply eutt_clo_bind with (UU:=eq); auto.
   - repeat setoid_rewrite DenotationTheory.denote_code_singleton.
     setoid_rewrite simpl_alloca_assign.
@@ -1416,3 +1416,22 @@ Proof.
   apply Renv_preserves_after_vars_2 with (e:=g_asl) (e'':=e')  in Eqn1; auto.
   apply compiler_correct_prealloc; auto.
 Qed.
+
+Definition well_formed_prog p :=
+match p with
+| Prog ds ss => well_formed ds ss
+end.
+
+Theorem compiler_correct_2 : forall (p : AST.prog),
+  well_formed_prog p ->
+  bisimilar TT (denote_prog p) (denote_code (TypToDtyp.convert_typ [] (compile p))).
+Proof.
+  destruct p.
+  simpl.
+  repeat rewrite TypToDtyp.convert_typ_code_app.
+  rewrite convert_typ_decs.
+  rewrite convert_typ_stmts.
+  apply compiler_correct.
+Qed.
+
+
