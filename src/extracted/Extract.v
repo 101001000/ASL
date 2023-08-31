@@ -26,7 +26,9 @@ From Vellvm Require
      Transformations.Transform
      Utils.ParserHelper.
 
+From Compiler Require Import Compiler.
 From Lang Require Import AST.
+
 
 Require ExtrOcamlBasic.
 Require ExtrOcamlString.
@@ -80,6 +82,6 @@ Cd "../extracted".
 
 Extraction Library ExtrOcamlIntConv.
 Recursive Extraction Library TopLevel.
-Recursive Extraction Library AST.
+Recursive Extraction Library Compiler.
 Extraction Library Transform.
 Extraction Library ParserHelper.
