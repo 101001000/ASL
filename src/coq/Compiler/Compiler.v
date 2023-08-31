@@ -1,5 +1,5 @@
 From Coq    Require Import Strings.String BinNat List ZArith ListSet.
-From Lang   Require Import AST.
+From Lang   Require Import AST Theory.
 From Vellvm Require Import Syntax Semantics.
 From ExtLib Require Import Core.RelDec Data.String Data.Map.FMapAList . 
 
@@ -207,8 +207,15 @@ induction ds.
   reflexivity.
 Qed.
 
+Definition well_formed (ds:list dec) (ss:list stmt) : Prop :=
+forall x e,
+(In (Var x) ds <-> In (Assign x e) ss) /\
+((~ In (Var x) ds) <-> (~ In (Assign x e) ss)) /\
+((count_occ dec_dec ds (Var x)) < 2)%nat.
 
-
-
+Definition well_formed_prog p :=
+match p with
+| Prog ds ss => well_formed ds ss
+end.
 
 

@@ -14,6 +14,7 @@ Open Scope list_scope.
 
 Section RAB.
 
+
   Context {A B : Type}.
   Context (RAB : A -> B -> Prop).
 
@@ -692,12 +693,6 @@ destruct H1.
   - rewrite alist_find_neq; auto.
 Qed.
 
-
-Definition well_formed (ds:list dec) (ss:list stmt) : Prop :=
-forall x e,
-(In (Var x) ds <-> In (Assign x e) ss) /\
-((~ In (Var x) ds) <-> (~ In (Assign x e) ss)) /\
-((count_occ dec_dec ds (Var x)) < 2)%nat.
 
 
 
@@ -1416,11 +1411,6 @@ Proof.
   apply Renv_preserves_after_vars_2 with (e:=g_asl) (e'':=e')  in Eqn1; auto.
   apply compiler_correct_prealloc; auto.
 Qed.
-
-Definition well_formed_prog p :=
-match p with
-| Prog ds ss => well_formed ds ss
-end.
 
 Theorem compiler_correct_2 : forall (p : AST.prog),
   well_formed_prog p ->
