@@ -8,5 +8,11 @@ src/_build
 *.crashcoqide
 *.out
 *.ll
-Compiler.ml
-Ast.ml
+src/extracted/*.ml
+src/extracted/*.mli
+src/extracted/STAMP
+src/extracted/CRelationClasses.mli.orig
+src/extracted/CRelationClasses.mli.rej
+src/.lia.cache
+src/coq/.Makefile.d
+src/coq/.lia.cache
